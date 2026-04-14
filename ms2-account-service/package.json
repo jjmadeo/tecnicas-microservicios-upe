@@ -1,0 +1,14 @@
+{
+  "name": "ms2-account-service",
+  "version": "1.0.0",
+  "description": "MS2 - Account Service (Node.js) - UPE POC",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1"
+  }
+}

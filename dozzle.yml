@@ -1,0 +1,11 @@
+groups:
+  microservicios:
+    title: "Flujo de Microservicios - UPE"
+    description: "Vista unificada de todos los servicios"
+    containers:
+      - ms1-user-service
+      - ms2-account-service
+      - ms3-notification-service
+      - ms4-audit-service
+      - ms5-card-service
+      - frontend

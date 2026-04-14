@@ -1,0 +1,157 @@
+version: "3.9"
+
+services:
+
+  # ─── INFRAESTRUCTURA ────────────────────────────────────────────────────────
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI → http://localhost:15672  (guest/guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  ms1-postgres:
+    image: postgres:16-alpine
+    container_name: ms1-postgres
+    environment:
+      POSTGRES_DB: ms1_users_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ms1_users_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  ms2-postgres:
+    image: postgres:16-alpine
+    container_name: ms2-postgres
+    environment:
+      POSTGRES_DB: ms2_accounts_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ms2_accounts_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  ms4-mongo:
+    image: mongo:7.0
+    container_name: ms4-mongo
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  # ─── LOGGING UNIFICADO ──────────────────────────────────────────────────────
+
+  log-viewer:
+    build: ./log-viewer
+    container_name: log-viewer
+    ports:
+      - "9999:9999"     # Logs unificados → http://localhost:9999
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  # ─── MICROSERVICIOS ─────────────────────────────────────────────────────────
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"     # Formulario → http://localhost:3000
+    environment:
+      MS1_URL: http://ms1-user-service:8080
+    depends_on:
+      ms1-user-service:
+        condition: service_healthy
+    restart: on-failure
+
+  ms1-user-service:
+    build: ./ms1-user-service
+    container_name: ms1-user-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://ms1-postgres:5432/ms1_users_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+    depends_on:
+      ms1-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s   # Spring Boot necesita tiempo para arrancar
+
+  ms2-account-service:
+    build: ./ms2-account-service
+    container_name: ms2-account-service
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PG_HOST: ms2-postgres
+      PG_PORT: 5432
+      PG_DATABASE: ms2_accounts_db
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+    depends_on:
+      ms2-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+  ms3-notification-service:
+    build: ./ms3-notification-service
+    container_name: ms3-notification-service
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+  ms4-audit-service:
+    build: ./ms4-audit-service
+    container_name: ms4-audit-service
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      MONGODB_URL: mongodb://ms4-mongo:27017
+      MONGODB_DB: ms4_audit_db
+    depends_on:
+      ms4-mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+  ms5-card-service:
+    build: ./ms5-card-service
+    container_name: ms5-card-service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
