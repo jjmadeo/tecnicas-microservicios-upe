@@ -57,8 +57,8 @@ RabbitMQ  (Topic Exchange: microservices.events)
 ## Levantar el proyecto
 
 ```bash
-git clone <url-del-repo>
-cd "Micro Servicios  UPE"
+git clone https://github.com/jjmadeo/tecnicas-microservicios-upe.git
+cd tecnicas-microservicios-upe
 docker compose up --build
 ```
 
